@@ -1,10 +1,8 @@
-<h1>Model Data Folder</h1>
+<h1>Carpeta de modelos entrenados</h1>
 
-When you run the project, some files will be generated which'll be stored here
+Los mejores modelos entrenados se almacenan aquí para usarlos en la aplicación web
 
 <ul type="square">
-	<li><strong>captions.txt</strong> : contains the saved text features</li>
-	<li><strong>features.pkl</strong> : contains the saved image features</li>
-	<li><strong>tokenizer.pkl</strong> : contains the saved tokenizer</li>
-	<li><strong>model.hdf5</strong> : the trained model</li>
+	<li><strong>tokenizer.pkl</strong> : Los archivos con esta extensión contienen el tokenizador guardado del modelo</li>
+	<li><strong>model.hdf5</strong> : Los archivos con esta extensión son modelos entrenados (pesos) </li>
 </ul>
