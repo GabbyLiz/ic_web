@@ -3,13 +3,13 @@ Comandos para creación de ambiente para proyecto
 Sin uso de GPU
 conda create -n image-captioning python=3.6.7
 conda activate image-captioning
-cd /d d:\tss\IC-resnet50             --> Colocar la dirección de la carpeta donde está el proyecto
+cd /d d:\ic_web             --> Colocar la dirección de la carpeta donde está el proyecto
 pip install -U -r requirements.txt
 
 Con uso de GPU (Modelo GTX1050Ti)
 conda create -n image-captioning-gpu python=3.6.7
 conda activate image-captioning-gpu
-cd /d d:\tss\IC-resnet50             --> Colocar la dirección de la carpeta donde está el proyecto
+cd /d d:\ic_web        --> Colocar la dirección de la carpeta donde está el proyecto
 pip install -U -r requirements-gpu.txt
 conda install cudatoolkit==10.0.130
 conda install cudnn==7.6.0
