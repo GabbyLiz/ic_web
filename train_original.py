@@ -1,20 +1,19 @@
 from os import listdir
-from tqdm import tqdm
-from numpy import array
+from nltk.translate.bleu_score import corpus_bleu
+from numpy import array, argmax
 from pickle import load, dump
-from keras.applications.inception_v3 import InceptionV3
-from keras.applications.vgg16 import VGG16
-from keras.applications.resnet50 import ResNet50
-from keras.preprocessing.image import load_img, img_to_array
-from keras.applications.vgg16 import preprocess_input
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
+from keras.preprocessing.image import load_img, img_to_array
 from keras.utils import to_categorical, plot_model
 from keras.models import Model
 from keras.layers import Input, Dense, LSTM, Embedding, Dropout
 from keras.layers.merge import add
-import os
+from keras.callbacks import ModelCheckpoint
+from keras.applications.vgg16 import VGG16, preprocess_input
+from tqdm import tqdm
 import string
+
 
 # Extraer características de cada foto del directorio
 def extract_features(directory):
@@ -47,6 +46,7 @@ def extract_features(directory):
 
     return features
 
+
 ## Carga de archivos que contiene todas las descripciones
 ## Se hace una limpieza del texto cargado
 def load_description(filename):
@@ -64,7 +64,7 @@ def load_description(filename):
         ...
     }
     """
-    #Extraer descripciones de las imagenes
+    # Extraer descripciones de las imagenes
     mapping = dict()
     # Procesar las lineas
     count = 0
@@ -84,19 +84,20 @@ def load_description(filename):
             mapping[image_id] = list()
         # Pie de foto
         mapping[image_id].append(image_caption)
-        count = count+1
-    print('{}: Subtítulos procesados: {}',count)
+        count = count + 1
+    print('Subtítulos procesados: ', count)
     return mapping
+
 
 """
 	Limpieza del texto de las descripciones
 	Dado el diccionario de identificadores de imagen a las descripciones
 	recorre cada descripcion y limpia el texto
 """
-# Preparar la tabla de traducción para eliminar los signos de puntuación
+
 
 def clean_descriptions(descriptions):
-
+    # Preparar la tabla de traducción para eliminar los signos de puntuación
     table = str.maketrans('', '', string.punctuation)
     for key, desc_list in descriptions.items():
         for i in range(len(desc_list)):
@@ -108,11 +109,11 @@ def clean_descriptions(descriptions):
             # Eliminar la puntuación de cada token
             desc = [w.translate(table) for w in desc]
             # Quitar 's' y 'a' sobrantes
-            desc = [word for word in desc if len(word)>1]
+            desc = [word for word in desc if len(word) > 1]
             # Eliminar tokens con números
             desc = [word for word in desc if word.isalpha()]
             # Guardar como cadena
-            desc_list[i] =  ' '.join(desc)
+            desc_list[i] = ' '.join(desc)
 
 
 # Convierte las descripciones cargadas en un vocabulario de palabras
@@ -123,13 +124,16 @@ def to_vocabulary(descriptions):
         [all_desc.update(d.split()) for d in descriptions[key]]
     return all_desc
 
+
 # Guardar una descripción por linea en un archivo
 """
 	- Guardar subtítulos en un archivo, uno por línea
 	- Después de guardar, captions.txt tiene la forma : - 'id' 'caption'.
 	  Ejemplo : 2252123185_487f21e336 stadium full of people watch game
 """
-def save_captions(descriptions, filename):
+
+
+def save_descriptions(descriptions, filename):
     lines = list()
     for key, desc_list in descriptions.items():
         for desc in desc_list:
@@ -139,23 +143,6 @@ def save_captions(descriptions, filename):
     file.write(data)
     file.close()
 
-####
-
-'''
-	Para cargar los datos para los conjuntos de datos de entrenamiento y desarrollo y
-	 transformar los datos cargados en pares de entrada-salida para adaptarse a un modelo 
-	 de aprendizaje profundo.
-
-	- Disponemos de los archivos Flickr_8k.trainImages.txt y Flickr_8k.devImages.txt que contienen identificadores únicos (id) 
-		que se pueden utilizar para filtrar las imágenes y sus descripciones
-	- Cargar una lista predefinida de identificadores de imagen(id)
-	- Como se ve el expediente:
-		2513260012_03d33305cf.jpg
-		2903617548_d3e38d7f88.jpg
-		3338291921_fe7ae0c8f8.jpg
-		488416045_1c6d903fe0.jpg
-		2644326817_8f45080b87.jpg
-'''
 
 # Cargar archivo en memoria
 def load_set(filename):
@@ -163,7 +150,7 @@ def load_set(filename):
     file = open(filename, 'r')
     # Leer todo el texto
     doc = file.read()
-    #Cerrar el archivo
+    # Cerrar el archivo
     file.close()
 
     # Cargar una lista predefinida de identificadores de fotos
@@ -178,21 +165,9 @@ def load_set(filename):
         dataset.append(identifier)
     return set(dataset)
 
-'''
-	- El modelo que desarrollaremos generará un pie de foto para una imagen dada y el pie de foto se generará palabra a palabra. 
-	- La secuencia de palabras generadas previamente se proporcionará como entrada. Por lo tanto, necesitaremos una 'primera palabra' para 
-		para iniciar el proceso de generación y una "última palabra" para señalar el final de la leyenda.
-	- Se utilizaran las cadenas "startseq" y "endseq". Estos tokens se añaden a los subtítulos a medida que se cargan. 
-	- Es importante hacer esto ahora antes de codificar el texto para que los tokens también se codifiquen correctamente.
-	- Cargar subtítulos en memoria
-	- Vista del archivo:
-		1000268201_693b08cb0e child in pink dress is climbing up set of stairs in an entry way
-		1000268201_693b08cb0e girl going into wooden building
-		1000268201_693b08cb0e little girl climbing into wooden playhouse
-		1000268201_693b08cb0e little girl climbing the stairs to her playhouse
-		1000268201_693b08cb0e little girl in pink dress going into wooden cabin
-'''
-def load_clean_description(filename, dataset):
+
+# load clean descriptions into memory
+def load_clean_descriptions(filename, dataset):
     # Cargar documento
     file = open(filename, 'r')
     doc = file.read()
@@ -215,88 +190,80 @@ def load_clean_description(filename, dataset):
             descriptions[image_id].append(desc)
     return descriptions
 
+
 # Cargar características de la imagen para un conjunto determinado
-def load_image_features(filename, dataset):
+def load_photo_features(filename, dataset):
     # Cargar todas las características
     all_features = load(open(filename, 'rb'))
     # Características del filtro
-    features = {id: all_features[id] for id in dataset}
+    features = {k: all_features[k] for k in dataset}
     return features
 
-'''
-	- Los subtítulos deberán codificarse en números antes de presentarlos al modelo.
-	- El primer paso para codificar los subtítulos es crear una correspondencia coherente entre palabras y valores enteros únicos.
-		Keras proporciona la clase Tokenizer que puede aprender este mapeo a partir de los subtítulos cargados.
-	- Adaptar un tokenizador a los subtítulos
-'''
 
 # Convertir el diccionario de descripciones en una lista
 def to_lines(descriptions):
-    all_captions = list()
-    for key_image_id in descriptions.keys():
-        [all_captions.append(caption) for caption in descriptions[key_image_id]]
-    return all_captions
+    all_desc = list()
+    for key in descriptions.keys():
+        [all_desc.append(d) for d in descriptions[key]]
+    return all_desc
+
 
 # Ajustar un token dadas las descripciones
-def create_tokenizer(train_descriptions):
-    lines = to_lines(train_descriptions)
+def create_tokenizer(descriptions):
+    lines = to_lines(descriptions)
     tokenizer = Tokenizer()
     tokenizer.fit_on_texts(lines)
     return tokenizer
 
-def create_sequences(tokenizer, max_length, desc_list, photos):
+
+# Calcular la longitud de los pies de foto con más palabras
+def max_length(descriptions):
+    lines = to_lines(descriptions)
+    return max(len(d.split()) for d in lines)
+
+
+# create sequences of images, input sequences and output words for an image
+def create_sequences(tokenizer, max_length, descriptions, photos, vocab_size):
     X1, X2, y = list(), list(), list()
-    vocab_size = len(tokenizer.word_index) + 1
-    # walk through each description for the image
-    for desc in desc_list:
-        # encode the sequence
-        seq = tokenizer.texts_to_sequences([desc])[0]
-    # split one sequence into multiple X,y pairs
-    for i in range(1, len(seq)):
-        # split into input and output pair
-        in_seq, out_seq = seq[:i], seq[i]
-        # pad input sequence
-        in_seq = pad_sequences([in_seq], maxlen=max_length)[0]
-        # encode output sequence
-        out_seq = to_categorical([out_seq], num_classes=vocab_size)[0]
-        # store
-        X1.append(photos)
-        X2.append(in_seq)
-        y.append(out_seq)
+    # walk through each image identifier
+    for key, desc_list in descriptions.items():
+        # walk through each description for the image
+        for desc in desc_list:
+            # encode the sequence
+            seq = tokenizer.texts_to_sequences([desc])[0]
+            # split one sequence into multiple X,y pairs
+            for i in range(1, len(seq)):
+                # split into input and output pair
+                in_seq, out_seq = seq[:i], seq[i]
+                # pad input sequence
+                in_seq = pad_sequences([in_seq], maxlen=max_length)[0]
+                # encode output sequence
+                out_seq = to_categorical([out_seq], num_classes=vocab_size)[0]
+                # store
+                X1.append(photos[key][0])
+                X2.append(in_seq)
+                y.append(out_seq)
     return array(X1), array(X2), array(y)
 
 
-# generador de datos, destinado a ser utilizado para model.fit_generator()
-def data_generator(descriptions, photos, tokenizer, max_length):
-    while 1:
-        for key, desc_list in descriptions.items():
-            # Recuperar las características de la foto
-            photo = photos[key][0]
-            in_img, in_seq, out_word = create_sequences(tokenizer, max_length, desc_list, photo)
-            yield [in_img, in_seq], out_word
-
-# Calcular la longitud de los pies de foto con más palabras
-def calc_max_length(captions):
-    lines = to_lines(captions)
-    return max(len(line.split()) for line in lines)
-
-
-def define_model(vocab_size, max_len):
-    # Modelo extractor de características
+# Definir el modelo RNN
+# La siguiente función denominada define_RNNModel() define y devuelve el
+# modelo listo para ajustarse.
+def define_model(vocab_size, max_length):
+    # modelo extractor de características
     # VGG16 produce un vector de 4096 dimensiones para cada imagen, que alimentaremos al modelo RNN
     inputs1 = Input(shape=(4096,))
     fe1 = Dropout(0.5)(inputs1)
     fe2 = Dense(256, activation='relu')(fe1)
 
     # Modelo procesador de secuencia
-    inputs2 = Input(shape=(max_len,))
+    inputs2 = Input(shape=(max_length,))
     se1 = Embedding(vocab_size, 256, mask_zero=True)(inputs2)
     se2 = Dropout(0.5)(se1)
     se3 = LSTM(256)(se2)
 
     # Modelo decodificador
     # Fusión de los modelos y creación de un clasificador softmax
-
     decoder1 = add([fe2, se3])
     decoder2 = Dense(256, activation='relu')(decoder1)
     outputs = Dense(vocab_size, activation='softmax')(decoder2)
@@ -304,78 +271,143 @@ def define_model(vocab_size, max_len):
     # Juntar [imagen, secuencia] [palabra]
     model = Model(inputs=[inputs1, inputs2], outputs=outputs)
     model.compile(loss='categorical_crossentropy', optimizer='adam')
-    #model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 
     # Resumen del modelo
     print(model.summary())
-    plot_model(model, to_file="RNN_model.png", show_shapes=True)
+    #plot_model(model, to_file='model.png', show_shapes=True)
     return model
 
 
+# Asignar un número entero a una palabra
+def int_to_word(integer, tokenizer):
+    for word, index in tokenizer.word_index.items():
+        if index == integer:
+            return word
+    return None
 
-##### LLAMADA DE METODOS
-#train autor1
-# # extract features from all images
-# directoryDataset = 'train_val_data/Flickr8k_Dataset/'
-# features = extract_features3(directoryDataset, 'vgg16')
-# print('Extracted Features: %d' % len(features))
-# # save to file
-# dump(features, open('features.pkl', 'wb'))
-#
-# #train_autor2
-# directoryToken = 'train_val_data/Flickr8k.token.txt'
-# # load descriptions
-# descriptions = load_description(directoryToken)
-# print('Loaded: %d ' % len(descriptions))
-# # clean descriptions
-# clean_descriptions(descriptions)
-# # summarize vocabulary
-# vocabulary = to_vocabulary(descriptions)
-# print('Vocabulary Size: %d' % len(vocabulary))
-# # save to file
-# save_captions(descriptions, 'descriptions.txt')
 
-#train_autor3
+# Generar la descripción de una imagen
+def generate_desc(model, tokenizer, photo, max_length):
+    # Iniciar el proceso de generación
+    in_text = 'startseq'
+    # Recorrer toda la longitud de la secuencia
+    for i in range(max_length):
+        # Codificar con enteros la secuencia de entrada
+        sequence = tokenizer.texts_to_sequences([in_text])[0]
+        # Rellena las secuencias de entrada
+        sequence = pad_sequences([sequence], maxlen=max_length)
+        # Predecir la palabra siguiente
+        yhat = model.predict([photo, sequence], verbose=0)
+        # Convertir la probabilidad en un número entero
+        # La función le ayuda a encontrar el índice del máximo en matrices
+        yhat = argmax(yhat)
+        # Asignar un entero a palabra
+        word = int_to_word(yhat, tokenizer)
+        # Parar si no podemos mapear la palabra
+        if word is None:
+            break
+            # Añadir como entrada para generar la siguiente palabra
+        in_text += ' ' + word
+        # Parar si predecimos el final de la secuencia
+        if word == 'endseq':
+            break
+    return in_text
 
-# Cargar conjunto de datos de entrenamiento (6K)
-directoryTrain = 'train_val_data/Flickr_8k.trainImages.txt'
-train = load_set(directoryTrain)
+
+"""
+	Evaluar el modelo en la puntuación BLEU utilizando predicciones argmax.
+"""
+
+# Validar con los datos de prueba
+def evaluate_model(model, descriptions, photos, tokenizer, max_length):
+    actual, predicted = list(), list()
+    for key, desc_list in tqdm(descriptions.items()):
+        # Predecir el título de la imagen
+        yhat = generate_desc(model, tokenizer, photos[key], max_length)
+        # Dividir en palabras
+        ground_truth = [caption.split() for caption in desc_list]
+        # Agregar a la lista
+        actual.append(ground_truth)
+        predicted.append(yhat.split())
+    # Calcular la puntuación BLEU
+    print('Puntaje BLEU :')
+    print(
+        'Una coincidencia perfecta da como resultado una puntuación de 1,0, mientras que una falta de coincidencia perfecta da como resultado una puntuación de 0,0.')
+    print('BLEU-1: %f' % corpus_bleu(actual, predicted, weights=(1.0, 0, 0, 0)))
+    print('BLEU-2: %f' % corpus_bleu(actual, predicted, weights=(0.5, 0.5, 0, 0)))
+    print('BLEU-3: %f' % corpus_bleu(actual, predicted, weights=(0.3, 0.3, 0.3, 0)))
+    print('BLEU-4: %f' % corpus_bleu(actual, predicted, weights=(0.25, 0.25, 0.25, 0.25)))
+
+
+# LLAMADA DE METODOS
+# Primera parte: extraer características de todas las imágenes
+directoryDataset = 'train_val_data/Flickr8k_Dataset/'
+features = extract_features(directoryDataset)
+print('Características extraídas: %d' % len(features))
+# Guardar en un archivo
+dump(features, open('features.pkl', 'wb'))
+
+# Segunda parte
+directoryToken = 'train_val_data/Flickr8k.token.txt'
+# Cargar las descripciones
+descriptions = load_description(directoryToken)
+print('Cargados: %d ' % len(descriptions))
+# Limpiar las descripciones de los textos
+clean_descriptions(descriptions)
+# Resumir el vocabulario
+vocabulary = to_vocabulary(descriptions)
+print('Tamaño del vocabulario: %d' % len(vocabulary))
+# Guardar en un archivo
+save_descriptions(descriptions, 'descriptions.txt')
+
+# Tercera parte: Dataset de entrenamiento
+
+# Cargar el conjunto de datos de entrenamiento(6K)
+filename = 'train_val_data/Flickr_8k.trainImages.txt'
+train = load_set(filename)
+print('Dataset: %d' % len(train))
 # Descripciones
-train_descriptions = load_clean_description('descriptions.txt', train)
-print('Descriptions: train=%d' % len(train_descriptions))
+train_descriptions = load_clean_descriptions('descriptions.txt', train)
+print('Descripcioness: entrenamiento=%d' % len(train_descriptions))
 # Características de las fotos
-train_features = load_image_features('features.pkl', train)
-print('Photos: train=%d' % len(train_features))
-
-# Preparar el tokenizador y guardarlo
+train_features = load_photo_features('features.pkl', train)
+print('Fotos: entrenamiento=%d' % len(train_features))
+# Preparar tokenizador
 tokenizer = create_tokenizer(train_descriptions)
 dump(tokenizer, open('tokenizer.pkl', 'wb'))
 vocab_size = len(tokenizer.word_index) + 1
-print('Vocabulary Size: %d' % vocab_size)
+print('Tamaño del vocabulario: %d' % vocab_size)
+# Determinar la longitud máxima de la secuencia
+max_length = max_length(train_descriptions)
+print('Longitud de descripción: %d' % max_length)
+# Preparar secuencias de entrenamiento
+X1train, X2train, ytrain = create_sequences(tokenizer, max_length, train_descriptions, train_features, vocab_size)
 
+# Cuarta Parte: dev dataset
 
-# Determina la longitud máxima de la secuencia
-max_length = calc_max_length(train_descriptions)
-print('Description Length: %d' % max_length)
+# Cargar el conjunto de datos de prueba
+filename = 'train_val_data/Flickr_8k.devImages.txt'
+test = load_set(filename)
+print('Dataset: %d' % len(test))
+# Descripciones
+test_descriptions = load_clean_descriptions('descriptions.txt', test)
+print('Descripciones: prueba=%d' % len(test_descriptions))
+# Características de las fotos
+test_features = load_photo_features('features.pkl', test)
+print('Fotos: prueba=%d' % len(test_features))
+# Preparar las secuencias de prueba
+X1test, X2test, ytest = create_sequences(tokenizer, max_length, test_descriptions, test_features, vocab_size)
 
-# Generador de datos para prueba
-generator = data_generator(train_descriptions, train_features, tokenizer, max_length)
+# Quinta parte: Entrenar el modelo
 
-
-inputs, outputs = next(generator)
-print(inputs[0].shape)
-print(inputs[1].shape)
-print(outputs.shape)
-
-# Entrenamiento
+# Definir el modelo
 model = define_model(vocab_size, max_length)
-# Entreanr el modelo, ejecutar las épocas manualmente y guardar el modelo con cada época
-epochs = 20
-steps = len(train_descriptions)
-for i in range(epochs):
-    # Creación del generador de datos
-    generator = data_generator(train_descriptions, train_features, tokenizer, max_length)
-    # Configurado para una época
-    model.fit_generator(generator, epochs=1, steps_per_epoch=steps, verbose=1)
-    # Guardar el modelo
-    model.save('model_' + str(i) + '.h5')
+# Definir callback de punto de control
+filepath = 'model-ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5'
+checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+# Modelo de ajuste
+model.fit([X1train, X2train], ytrain, epochs=5, verbose=2, callbacks=[checkpoint],
+          validation_data=([X1test, X2test], ytest))
+
+# Evalar el modelo con los datos de validación y obtener la puntuación BLEU
+evaluate_model(model, test_descriptions, test_features, tokenizer, max_length)

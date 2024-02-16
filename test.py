@@ -17,16 +17,17 @@ from googletrans import Translator
 
 translator = Translator()
 
-# Inicialización de los valores de las variables
-max_length = 34  # Se establece manualmente tras el entrenamiento del modelo, en el caso de flick8 el valor es 51 y en el caso de coco es 42
-beam_search_k = 3
-tokenizer_path = "tokenizer.pkl"
-model_load_path = "model_vgg16_epoch-10_train_loss-2.7379_val_loss-3.6461.hdf5"  # Colocar la ruta del modelo generado con el entrenamiento
-test_data_path = 'test_data_flickr8/'
-model_type = 'vgg16'  # inceptionv3, vgg16 or resnet50
+# Inicializar los valores para entrenamiento de la red
+testConfig = {
+    'max_length': 40,  # Se establece manualmente tras el entrenamiento del modelo, en el caso de flick8 el valor es 51,34 o 40 y en el caso de coco es 40
+    'beam_search_k': 3,
+    'tokenizer_path': 'tokenizer_flick.pkl',
+    'model_load_path': 'model_inceptionv3_epoch-07_train_loss-2.5311_val_loss-3.1619.hdf5',  # Colocar la ruta del modelo generado con el entrenamiento
+    'test_data_path': 'test_data_flickr8/',
+    'model_type': 'inceptionv3'  # inceptionv3, vgg16 or resnet50
+}
 
-
-# Define el modelo CNN (inceptionv3, vgg16, resnet50)
+# Definir el modelo CNN (inceptionv3, vgg16, resnet50)
 def CNNModel(model_type):
     if model_type == 'inceptionv3':
         model = InceptionV3()
@@ -40,15 +41,15 @@ def CNNModel(model_type):
     return model
 
 
-# Asigna un número entero a una palabra
-def int_to_word(integer, tokenizer):
+# Asignar un número entero a una palabra
+def word_for_id(integer, tokenizer):
     for word, index in tokenizer.word_index.items():
         if index == integer:
             return word
     return None
 
 
-# Genera un pie de foto para una imagen, dado un modelo pre-entrenado y un tokenizador para mapear enteros a palabras.
+# Generar un pie de foto para una imagen, dado un modelo pre-entrenado y un tokenizador para mapear enteros a palabras.
 # Utiliza el algoritmo de búsqueda BEAM
 def generate_caption_beam_search(model, tokenizer, image, max_len, beam_index=3):
     start_word = [[tokenizer.texts_to_sequences(['startseq'])[0], 0.0]]
@@ -76,7 +77,7 @@ def generate_caption_beam_search(model, tokenizer, image, max_len, beam_index=3)
         start_word = start_word[-beam_index:]
 
     start_word = start_word[-1][0]
-    intermediate_caption = [int_to_word(i, tokenizer) for i in start_word]
+    intermediate_caption = [word_for_id(i, tokenizer) for i in start_word]
 
     final_caption = []
 
@@ -92,26 +93,26 @@ def generate_caption_beam_search(model, tokenizer, image, max_len, beam_index=3)
 
 # Generar un pie de foto para una imagen, a partir de un modelo previamente entrenado y un tokenizador para convertir enteros en palabras.
 # Utiliza argmax simple
-def generate_caption(model, tokenizer, image, max_length):
+def generate_desc(model, tokenizer, photo, max_length):
+    # Iniciar el proceso de generación
     in_text = 'startseq'
-    # Iterar sobre toda la longitud de la secuencia
-    for _ in range(max_length):
-        # Codificar secuencia de entrada
+    # Recorrer toda la longitud de la secuencia
+    for i in range(max_length):
+        # Codificar con enteros la secuencia de entrada
         sequence = tokenizer.texts_to_sequences([in_text])[0]
-        # Entrada pad
+        # Rellena las secuencias de entrada
         sequence = pad_sequences([sequence], maxlen=max_length)
-        # Predice la palabra siguiente
-        # El modelo emitirá una predicción, que será una distribución de probabilidad sobre todas las palabras del vocabulario.
-        yhat = model.predict([image, sequence], verbose=0)
-        # El vector de salida representa una distribución de probabilidad donde la probabilidad máxima es la posición de la palabra predicha
-        # Toma la clase de salida con la máxima probabilidad y la convierte a entero
+        # Predecir la palabra siguiente
+        yhat = model.predict([photo, sequence], verbose=0)
+        # Convertir la probabilidad en un número entero
+        # La función le ayuda a encontrar el índice del máximo en matrices
         yhat = argmax(yhat)
-        # Convertir entero en palabra
-        word = int_to_word(yhat, tokenizer)
-        # Detener el proceso si no podemos asignar la palabra
+        # Asignar un entero a palabra
+        word = word_for_id(yhat, tokenizer)
+        # Parar si no podemos mapear la palabra
         if word is None:
             break
-        # Añadir como entrada para generar la siguiente palabra
+            # Añadir como entrada para generar la siguiente palabra
         in_text += ' ' + word
         # Parar si predecimos el final de la secuencia
         if word == 'endseq':
@@ -146,43 +147,40 @@ def extract_features(filename, model, model_type):
 
 
 # Cargar tokenizer
-tokenizer = load(open(tokenizer_path, 'rb'))
+tokenizer = load(open(testConfig['tokenizer_path'], 'rb'))
 # Cargar el modelo
-caption_model = load_model(model_load_path)
-image_model = CNNModel(model_type)
+caption_model = load_model(testConfig['model_load_path'])
+image_model = CNNModel(testConfig['model_type'])
 
-# Carga y prepara las imágenes
-for image_file in os.listdir(test_data_path):
+# Cargar y prepara las imágenes
+for image_file in os.listdir(testConfig['test_data_path']):
     if image_file.split('--')[0] == 'output':
         continue
     if image_file.split('.')[1] == 'jpg' or image_file.split('.')[1] == 'jpeg':
         print('Generando subtítulo para {}'.format(image_file))
         # Codificación de la imagen con modelo CNN
-        image = extract_features(test_data_path + image_file, image_model, model_type)
+        image = extract_features(testConfig['test_data_path'] + image_file, image_model, testConfig['model_type'])
         # Genera la descripción usando el decodificador RNN + BEAM search
-        generated_caption = generate_caption_beam_search(caption_model, tokenizer, image, max_length,
-                                                         beam_index= beam_search_k)
-        # Descripción con método de predicción Argmax
-        #generated_caption = generate_caption(caption_model, tokenizer, image, max_length)
+        generated_caption = generate_caption_beam_search(caption_model, tokenizer, image, testConfig['max_length'], beam_index = testConfig['beam_search_k'])
         # Genera la descripción usando el decodificador RNN + ARGMAX
-        # generated_caption = generate_caption(caption_model, tokenizer, image, max_length)
-        # Remueve startseq y endseq
+        #generated_caption = generate_desc(caption_model, tokenizer, image, testConfig['max_length'])
+        # Remover startseq y endseq
         caption = 'Caption: ' + generated_caption.split()[1].capitalize()
         for x in generated_caption.split()[2:len(generated_caption.split()) - 1]:
             caption = caption + ' ' + x
         caption += '.'
-
+        # Traducir al español el texto generado
         translation = translator.translate(caption, dest='es')
         caption = translation.text
 
-        # Muestra la imagen y su descripción
-        pil_im = Image.open(test_data_path + image_file, 'r')
+        # Mostrar la imagen y su descripción
+        pil_im = Image.open(testConfig['test_data_path'] + image_file, 'r')
         fig, ax = plt.subplots(figsize=(20, 20))
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
         _ = ax.imshow(np.asarray(pil_im), interpolation='nearest')
         # _ = ax.set_title("BEAM Search with k={}\n{}".format(config['beam_search_k'],caption),fontdict={'fontsize': '20','fontweight' : '40'})
         _ = ax.set_title(
-            "Entrenamiento con 20 épocas y método Argmax para predecir los subtítulos{}\n{}".format('', caption),
+            "Resultado{}\n{}".format('', caption),
             fontdict={'fontsize': '20', 'fontweight': '40'})
-        plt.savefig(test_data_path + 'salida--' + image_file)
+        plt.savefig(testConfig['test_data_path'] + 'salida--' + image_file)
