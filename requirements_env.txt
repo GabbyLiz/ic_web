@@ -1,0 +1,11 @@
+Numpy==1.16.1
+tensorflow==1.13.1
+Keras==2.2.4
+nltk==3.2.5
+pillow==8.4.0
+Matplotlib==3.3.1
+tqdm==4.28.1
+streamlit
+googletrans
+gtts
+
