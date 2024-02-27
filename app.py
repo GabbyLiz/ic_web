@@ -245,4 +245,4 @@ def add_bg_from_local(image_file):
     st.write("Ingresa en el [link](https://github.com/GabbyLiz/ic_web)" + " para ver el código completo")
 
 
-add_bg_from_local('/mount/src/ic_web/logo2.png')
+add_bg_from_local("/mount/src/ic_web/logo2.png")
