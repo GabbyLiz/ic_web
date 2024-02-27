@@ -194,26 +194,26 @@ def add_bg_from_local(image_file):
     if app_mode == 'Modelo 1':
         model_type = 'inceptionv3'
         max_length_model = 51
-        model_load_path = '/mount/src/ic_web/model_data/m11_model_inceptionv3_epoch-04_train_loss-2.5424_val_loss-2.8094.hdf5'
-        tokenizer_path1 = '/mount/src/ic_web/model_data/m11_tokenizer_inception.pkl'
+        model_load_path = 'model_data/m11_model_inceptionv3_epoch-04_train_loss-2.5424_val_loss-2.8094.hdf5'
+        tokenizer_path1 = 'model_data/m11_tokenizer_inception.pkl'
 
     if app_mode == 'Modelo 2':
         model_type = 'resnet50'
         max_length_model = 51
-        model_load_path = '/mount/src/ic_web/model_data/m12_model_resnet50_epoch-06_train_loss-2.2868_val_loss-2.8316.hdf5'
-        tokenizer_path1 = '/mount/src/ic_web/model_data/m12_tokenizer_resnet50_coco.pkl'
+        model_load_path = 'model_data/m12_model_resnet50_epoch-06_train_loss-2.2868_val_loss-2.8316.hdf5'
+        tokenizer_path1 = 'model_data/m12_tokenizer_resnet50_coco.pkl'
 
     if app_mode == 'Modelo 3':
         model_type = 'vgg16'
         max_length_model = 51
-        model_load_path = '/mount/src/ic_web/model_data/m14_model_vgg16_epoch-06_train_loss-2.4527_val_loss-2.9014.hdf5'
-        tokenizer_path1 = '/mount/src/ic_web/model_data/m14_tokenizer_vgg16_coco.pkl'
+        model_load_path = 'model_data/m14_model_vgg16_epoch-06_train_loss-2.4527_val_loss-2.9014.hdf5'
+        tokenizer_path1 = 'model_data/m14_tokenizer_vgg16_coco.pkl'
 
     if app_mode == 'Modelo 4':
         model_type = 'inceptionv3'
         max_length_model = 40
-        model_load_path = '/mount/src/ic_web/model_data/m4_model_inceptionv3_epoch-07_train_loss-2.5311_val_loss-3.1619.hdf5'
-        tokenizer_path1 = '/mount/src/ic_web/model_data/m4_tokenizer_flick.pkl'
+        model_load_path = 'model_data/m4_model_inceptionv3_epoch-07_train_loss-2.5311_val_loss-3.1619.hdf5'
+        tokenizer_path1 = 'model_data/m4_tokenizer_flick.pkl'
 
     # Solicitar al usuario una imagen del tipo "jpg", "jpeg", "webp"
     uploaded_image = st.file_uploader("Seleccione una imagen de su dispositivo a continuación: ", type=["jpg", "jpeg", "webp"])
@@ -245,4 +245,4 @@ def add_bg_from_local(image_file):
     st.write("Ingresa en el [link](https://github.com/GabbyLiz/ic_web)" + " para ver el código completo")
 
 
-add_bg_from_local('/mount/src/ic_web/logo2.png')
+add_bg_from_local('logo2.png')
