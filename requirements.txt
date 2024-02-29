@@ -8,4 +8,4 @@ tqdm
 streamlit
 googletrans
 gtts
-
+git-lfs
