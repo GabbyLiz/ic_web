@@ -5,7 +5,8 @@ nltk==3.2.5
 pillow==8.4.0
 Matplotlib==3.3.1
 tqdm==4.28.1
+h5py==2.10.0
 streamlit
-googletrans
+googletrans==3.1.0a0
 gtts
 
